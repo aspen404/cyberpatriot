@@ -1009,8 +1009,8 @@ function recalc() {
     done + ' of ' + total + ' tasks (' + gp + '% done)';
 }
 
-// ── Navigation ──
-function showDashboard() {
+// ── Navigation (internal renderers, no history side-effects) ──
+function _renderDashboard() {
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('detail').style.display = 'none';
   current = null;
@@ -1018,17 +1018,14 @@ function showDashboard() {
   recalc();
 }
 
-function showWeek(id) {
+function _renderWeek(id) {
   const tpl = document.getElementById('tpl-'+id);
-  if (!tpl) return;
+  if (!tpl) return false;
   current = id;
 
-  // Populate detail view from template
   const dc = document.getElementById('detail-content');
   dc.innerHTML = tpl.innerHTML;
 
-  // Restore checkbox state on the clones; remove inline onchange to
-  // prevent double-firing, then attach a single event listener.
   const s = load();
   dc.querySelectorAll('input[type=checkbox]').forEach(cb => {
     cb.removeAttribute('onchange');
@@ -1036,7 +1033,6 @@ function showWeek(id) {
     cb.addEventListener('change', ck);
   });
 
-  // Prev / Next buttons
   const idx = ORDER.indexOf(id);
   document.getElementById('prev-btn').disabled = idx <= 0;
   document.getElementById('next-btn').disabled = idx >= ORDER.length - 1;
@@ -1044,21 +1040,49 @@ function showWeek(id) {
   document.querySelector('.week-nav-btns').style.display = showNav ? 'flex' : 'none';
 
   document.getElementById('dashboard').style.display = 'none';
-  document.getElementById('detail').style.display = 'block'; // ← was '' which let CSS none win
+  document.getElementById('detail').style.display = 'block';
   window.scrollTo(0, 0);
   recalc();
+  return true;
+}
+
+// ── Public navigation (push history) ──
+function showDashboard() {
+  _renderDashboard();
+  history.pushState({ page: 'dashboard' }, '', location.pathname + location.search);
+}
+
+function showWeek(id) {
+  if (_renderWeek(id)) {
+    history.pushState({ page: 'week', id }, '', '#' + id);
+  }
 }
 
 function navWeek(dir) {
   if (!current) return;
-  const idx = ORDER.indexOf(current);
-  const nxt = ORDER[idx + dir];
+  const nxt = ORDER[ORDER.indexOf(current) + dir];
   if (nxt) showWeek(nxt);
 }
+
+// ── Browser back / forward ──
+window.addEventListener('popstate', () => {
+  const hash = location.hash.slice(1);
+  if (hash && document.getElementById('tpl-' + hash)) {
+    _renderWeek(hash);
+  } else {
+    _renderDashboard();
+  }
+});
 
 // ── Boot ──
 restore();
 recalc();
+
+// Honour a hash if someone lands on a direct link (e.g. shared URL)
+const _initHash = location.hash.slice(1);
+if (_initHash && document.getElementById('tpl-' + _initHash)) {
+  _renderWeek(_initHash);
+}
 </script>
 </body>
 </html>
